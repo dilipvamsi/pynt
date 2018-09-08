@@ -9,7 +9,7 @@ COMMAND_INVOKED_CANNOT_EXECUTE = 126
 KEYBOARD_INTERRUPT = 130
 
 
-def __call(*popenargs, timeout=None, **kwargs):
+def __call(*popenargs, **kwargs):
     """Run command with arguments.  Wait for command to complete or
     timeout, then return the returncode attribute.
 
@@ -19,7 +19,10 @@ def __call(*popenargs, timeout=None, **kwargs):
     """
     proc = subprocess.Popen(*popenargs, **kwargs)
     try:
-        return proc.wait(timeout=timeout)
+        if sys.version_info.major < 3:
+            return proc.wait()
+        else:
+            return proc.wait(timeout=kwargs.get("timeout", None))
     except KeyboardInterrupt:
         try:
             proc.send_signal(subprocess.signal.SIGINT)
