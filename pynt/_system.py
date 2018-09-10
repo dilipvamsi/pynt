@@ -10,6 +10,55 @@ import sys
 
 COMMAND_PREFIX = ">>>"
 COMMAND_INVOKED_CANNOT_EXECUTE = 126
+KEYBOARD_INTERRUPT = 130
+
+
+def __call(*popenargs, **kwargs):
+    """Run command with arguments.  Wait for command to complete or
+    timeout, then return the returncode attribute.
+
+    The arguments are the same as for the Popen constructor.  Example:
+
+    retcode = __call(["ls", "-l"])
+    """
+    proc = subprocess.Popen(*popenargs, **kwargs)
+    try:
+        if sys.version_info.major < 3:
+            return proc.wait()
+        else:
+            return proc.wait(timeout=kwargs.get("timeout", None))
+    except KeyboardInterrupt:
+        try:
+            proc.send_signal(subprocess.signal.SIGINT)
+            while proc.poll() is None:
+                continue
+        except Exception:
+            proc.kill()
+            raise
+        finally:
+            raise
+    except Exception:
+        proc.kill()
+        raise
+
+
+def __check_call(*popenargs, **kwargs):
+    """Run command with arguments.  Wait for command to complete.  If
+    the exit code was zero then return, otherwise raise
+    CalledProcessError.  The CalledProcessError object will have the
+    return code in the returncode attribute.
+
+    The arguments are the same as for the call function.  Example:
+
+    check_call(["ls", "-l"])
+    """
+    retcode = __call(*popenargs, **kwargs)
+    if retcode:
+        cmd = kwargs.get("args")
+        if cmd is None:
+            cmd = popenargs[0]
+        raise subprocess.CalledProcessError(retcode, cmd)
+    return 0
 
 
 def __stdout_print(*args, **kwargs):
@@ -39,6 +88,13 @@ def execute(*args):
                 )
             )
             sys.exit(COMMAND_INVOKED_CANNOT_EXECUTE)
+        except KeyboardInterrupt:
+            print(
+                "killing the command: '%s' and exiting the execution." % (
+                    command
+                )
+            )
+            sys.exit(KEYBOARD_INTERRUPT)
 
 
 def set_environmental_variables(**kwargs):
@@ -73,13 +129,13 @@ def rm(*wild_card_strings, **kwargs):
     for wild_card_string in wild_card_strings:
         file_paths = glob.glob(wild_card_string)
         if not ignore_if_doesnt_exist:
-            __stdout_print(">>> pynt-rm -r %s" % wild_card_string)
+            __stdout_print(COMMAND_PREFIX, "pynt-rm -r %s" % wild_card_string)
             if len(file_paths) is 0:
                 raise IOError(
                     "'%s' No such file or directory exists" % wild_card_string
                 )
         else:
-            __stdout_print(">>> pynt-rm -rf %s" % wild_card_string)
+            __stdout_print(COMMAND_PREFIX, "pynt-rm -rf %s" % wild_card_string)
         for file_path in file_paths:
             try:
                 if os.path.isfile(file_path):
